@@ -1,0 +1,106 @@
+heat_template_version: 2014-10-16
+
+description: >
+   Testing Heat Template. This templates launch an instance and after successful creation of VM, installs any software/tool in it.
+
+parameter_groups:
+   - label: Network
+     description: Information about Networks
+     parameters:
+          - private_net_id
+          - public_net_id
+          - dns_ip
+   - label: image
+     description: Information about Image
+     parameters:
+          - flavor
+          - image
+          - key_name
+   - label: post_installation
+     parameters:
+          - command
+
+parameters:
+   private_net_id:
+      type: string
+      label: Private Network
+      description: ID of public network
+      default: ""
+      constraints:
+         - custom_constraint: neutron.network
+           description: Must be a valid networkID
+   public_net_id:
+      type: string
+      label: Public Network
+      description: ID of private network
+      constraints:
+         - custom_constraint: neutron.network
+           description: Must be a valid networkID
+   flavor:
+      type: string
+      label: Flavor
+      description: Falvor
+      constraints:
+         - custom_constraint: nova.flavor
+           description: Must be a valid flavor 
+   image:
+      type: string
+      label: Image
+      description: Image name
+      default: CentOS
+   key_name:
+      type: string
+      label: Key Name
+      description: Keypair Name
+      constraints:
+         - custom_constraint: nova.keypairs
+           description: Must be a valid keypairname
+   dns_ip:
+      type: string
+      label: DNS
+      description: DNS IP
+      default: 8.8.8.8
+   command:
+      type: string
+      label: Install
+      description: What you want to install
+      default: vim
+
+resources:
+   port:
+      type: OS::Neutron::Port
+      properties:
+         network_id: { get_param: private_net_id }
+   floating_ip:
+      type: OS::Neutron::FloatingIP
+      properties:
+         floating_network_id: { get_param: public_net_id }
+         port_id: { get_resource: port }
+   server:
+      type: OS::Nova::Server
+      properties:
+         name: VM-stack-testing
+         image: { get_param: image }
+         flavor: { get_param: flavor }
+         key_name: { get_param: key_name }
+         networks:
+             - port: { get_resource: port }
+         user_data:
+           str_replace: 
+             template: |
+                 #!/bin/bash
+                 echo "Hello world"
+                 echo "Installing $tool"
+                 sudo yum install $tool -y
+             params:
+                 $tool: { get_param: command }
+
+outputs:
+   public_ip:
+      label: Floating IP
+      description: IP address in public network
+      value: { get_attr: [ floating_ip, floating_ip_address ] }
+   private_ip:
+      label: Private IP
+      description: IP address in private network
+      value: { get_attr: [ server, first_address ] }
